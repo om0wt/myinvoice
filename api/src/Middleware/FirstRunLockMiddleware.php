@@ -68,8 +68,21 @@ final class FirstRunLockMiddleware implements MiddlewareInterface
                 ->query('SELECT COUNT(*) FROM users WHERE is_active = 1')
                 ->fetchColumn();
             $this->needsSetupCache = $count === 0;
+        } catch (\PDOException $e) {
+            // Rozlišujeme „tabulka users neexistuje" (= fresh Docker install bez `migrate.php`,
+            // schema chybí) od ostatních DB chyb (connection refused, auth fail, timeout).
+            // V prvním případě chceme uživatele poslat na setup wizard — jinak vidí login a
+            // nemá tušení, proč se nemůže přihlásit. SQLSTATE 42S02 = base table not found.
+            if (
+                $e->getCode() === '42S02'
+                || str_contains($e->getMessage(), "doesn't exist")
+                || str_contains($e->getMessage(), 'Unknown table')
+            ) {
+                $this->needsSetupCache = true;
+            } else {
+                $this->needsSetupCache = false;
+            }
         } catch (\Throwable) {
-            // Pokud DB nejde, raději necháme middleware projít a chyba se ukáže výš.
             $this->needsSetupCache = false;
         }
 
