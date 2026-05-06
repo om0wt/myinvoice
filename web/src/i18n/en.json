@@ -255,6 +255,7 @@
     "send_to_client": "Send to client",
     "mark_paid": "Mark as paid",
     "cancel_or_credit": "Cancel / credit note",
+    "delete_cancelled": "Delete (cancellation + original)",
     "clone": "Clone",
     "edit_admin": "Edit (admin)",
     "more_actions": "More actions",

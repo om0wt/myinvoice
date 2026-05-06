@@ -255,6 +255,7 @@
     "send_to_client": "Odeslat klientovi",
     "mark_paid": "Označit zaplaceno",
     "cancel_or_credit": "Storno / dobropis",
+    "delete_cancelled": "Smazat (storno + originál)",
     "clone": "Klonovat",
     "edit_admin": "Upravit (admin)",
     "more_actions": "Další akce",

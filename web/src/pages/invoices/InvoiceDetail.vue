@@ -180,6 +180,11 @@ function actionColor(a: string): string {
 
 async function deleteInvoice() {
   if (!invoice.value) return
+  // Pro cancellation doklad: smaž PARENT (cascade pak odstraní i tento storno),
+  // jinak by zůstala originálka v 'cancelled' bez storno dokladu.
+  if (invoice.value.invoice_type === 'cancellation' && invoice.value.parent_invoice_id) {
+    return deleteCancellationParent()
+  }
   // Per-status confirm — pro vystavené/odeslané/zaplacené/stornované je delší vysvětlující
   // hláška (force-delete účetního dokladu, cascade na storno/dobropis).
   // UI tlačítko force-delete se admin-only zobrazuje (canDelete), backend má stejný guard.
@@ -199,6 +204,30 @@ async function deleteInvoice() {
   busy.value = 'delete'
   try {
     const res = await invoicesApi.delete(invoice.value.id)
+    if (res?.cascade_deleted && res.cascade_deleted > 0) {
+      toast.success(t('invoice.deleted_with_cascade', { n: res.cascade_deleted }))
+    }
+    router.push('/invoices')
+  } catch (e: any) {
+    toast.error(e?.response?.data?.error?.message || t('invoice.delete_failed'))
+  } finally {
+    busy.value = null
+  }
+}
+
+async function deleteCancellationParent() {
+  if (!invoice.value || !invoice.value.parent_invoice_id) return
+  const parentId = invoice.value.parent_invoice_id
+  // Najdi varsymbol parenta pro hezčí confirm — fallback na #id
+  let parentVs = `#${parentId}`
+  try {
+    const parent = await invoicesApi.get(parentId)
+    if (parent?.varsymbol) parentVs = parent.varsymbol
+  } catch { /* ignore — fallback stačí */ }
+  if (!confirm(t('invoice.delete_cancelled_confirm', { varsymbol: parentVs }))) return
+  busy.value = 'delete'
+  try {
+    const res = await invoicesApi.delete(parentId)
     if (res?.cascade_deleted && res.cascade_deleted > 0) {
       toast.success(t('invoice.deleted_with_cascade', { n: res.cascade_deleted }))
     }
@@ -1299,6 +1328,13 @@ async function updateApprovalStatus() {
           class="cursor-pointer px-3 h-9 text-sm border border-danger-500/50 text-danger-500 hover:bg-danger-50 rounded-md inline-flex items-center gap-1.5">
           <svg class="w-4 h-4 text-danger-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 11v6m4-6v6m1 5H9a2 2 0 0 1-2-2V7h10v13a2 2 0 0 1-2 2zM5 7h14l-1-3H6L5 7z"/></svg>
           {{ t('invoice.cancel_or_credit') }}
+        </button>
+
+        <button v-if="isAdmin && (invoice.status === 'cancelled' || (invoice.invoice_type === 'cancellation' && invoice.parent_invoice_id))"
+          @click="deleteInvoice" :disabled="busy !== null"
+          class="cursor-pointer px-3 h-9 text-sm border border-danger-500/50 text-danger-500 hover:bg-danger-50 rounded-md inline-flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-danger-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 11v6m4-6v6m1 5H9a2 2 0 0 1-2-2V7h10v13a2 2 0 0 1-2 2zM5 7h14l-1-3H6L5 7z"/></svg>
+          {{ busy === 'delete' ? '…' : t('invoice.delete_cancelled') }}
         </button>
 
       </div>
