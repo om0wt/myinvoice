@@ -67,7 +67,7 @@ ale není daňový poradce.
 - **Schvalování výkazu zákazníkem** — volitelné per zakázka. Před vystavením
   faktury pošleš zákazníkovi e-mail s odkazem na veřejnou stránku (chráněno
   jednorázovým tokenem + CAPTCHA). Po schválení se faktura **automaticky
-  vystaví a odešle**. ![Schvalovací stránka](img/09_schvalit_vykaz_prace.webp)
+  vystaví a odešle**.
 
 ## 1.4 Výkaz víceprací (timesheet)
 
