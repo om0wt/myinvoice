@@ -230,6 +230,16 @@ docker compose exec app php api/bin/migrate.php
 > manuál (`tools/generateManualHtml.php` se volá build-time v `Dockerfile`),
 > takže `http://localhost:8080/manual` funguje bez dalších kroků. Update na
 > nový obsah = `cmd/docker-update.{sh,ps1}` (pull novějšího image).
+>
+> Kdyby `/manual` vrátil 503 *„Manuál není zatím vygenerovaný“*: pokud
+> jedeš na starém image před v2.1.5, `cmd/docker-update.{sh,ps1}` (pull
+> nového GHCR image) je řešení — staré image neměly `manual/*.md` uvnitř
+> vůbec. Na v2.1.5+ image regeneruješ manuál ručně bez rebuildu:
+>
+> ```bash
+> docker compose -f docker-compose.production.yml exec app \
+>   php tools/generateManualHtml.php
+> ```
 
 ### Po dokončení (všechny varianty)
 
