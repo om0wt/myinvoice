@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.3] — 2026-05-07
+
+### Fixed
+
+- **Send modal v invoice detailu pre-fillne všechny příjemce** — když měla
+  zakázka definované `project_billing_emails`, modal ukazoval jen
+  `client_main_email`. Pre-fill rozšířen na `client_main_email + všechny
+  project_billing_emails` (de-duplikováno čárkou) — odpovídá tomu, co
+  reálně backend `SendEmailAction::resolveRecipients` posílá. Uživatel
+  může v inputu libovolně upravit.
+
+### Infrastructure
+
+- **CI Frontend job + Dockerfile web-build stage**: Node 20 → **Node 24**
+  (current LTS od října 2025). pnpm 11.0.8 (auto-resolved via
+  `corepack@latest`) vyžaduje Node ≥ 22.13 — Node 20 padalo s
+  `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`. Bump rovnou na 24, ne 22 —
+  Node 20 actions deprecated, removed Sep 2026.
+
+### Note
+
+`v2.1.2` release exists na GitHubu, ale docker-publish workflow pro něj
+selhal (stejná Node 20 chyba) — proto **na GHCR žádný `:2.1.2` image
+neexistuje**, `:latest` zůstával na `2.1.1`. Tato verze (2.1.3) je první
+úspěšný Docker build po 2.1.1 a obsahuje všechny fixes z 2.1.2 (logo
+display size, header border-bottom).
+
 ## [2.1.2] — 2026-05-07
 
 ### Fixed

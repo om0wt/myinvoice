@@ -218,7 +218,7 @@ Předpoklady:
 - **PHP 8.5+** s extensions: `pdo`, `pdo_mysql`, `mbstring`, `openssl`, `json`,
   `iconv`, `gd`
 - **MariaDB 10.6+** (doporučeno 11.x)
-- **Composer 2.x**, **Node.js 20+**, **pnpm 9+**
+- **Composer 2.x**, **Node.js 22+** (24 doporučeno), **pnpm 10+**
 - **Redis** (volitelné — fallback na MariaDB MEMORY)
 - Web server: **IIS** nebo **Apache** (oba podporované, repo má `web.config`
   i `.htaccess`)
