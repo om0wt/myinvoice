@@ -157,13 +157,19 @@ final class LoginAction
             $cookieSecure ? '; Secure' : '',
         );
 
+        $totpEnabled   = (int) $user['totp_enabled'] === 1;
+        $requireTotp   = (bool) $this->config->get('auth.require_totp', false);
+        $mustSetupTotp = $requireTotp && !$totpEnabled;
+
         return Json::ok($response, [
             'user' => [
-                'id'     => (int) $user['id'],
-                'email'  => $user['email'],
-                'name'   => $user['name'],
-                'role'   => $user['role'],
-                'locale' => $user['locale'],
+                'id'              => (int) $user['id'],
+                'email'           => $user['email'],
+                'name'            => $user['name'],
+                'role'            => $user['role'],
+                'locale'          => $user['locale'],
+                'totp_enabled'    => $totpEnabled,
+                'must_setup_totp' => $mustSetupTotp,
             ],
             'csrf_token' => $session['csrf_token'],
         ])->withHeader('Set-Cookie', $cookie);

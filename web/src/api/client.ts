@@ -49,6 +49,17 @@ api.interceptors.response.use(
     if (status === 423 && code === 'setup_required') {
       window.location.href = '/setup'
     }
+    // 403 totp_setup_required = require_totp=true a uživatel nemá aktivní TOTP.
+    // Backend takhle blokuje všechno mimo whitelist (/me, /logout, /totp/*).
+    // Frontend má router guard, ale když 403 přijde z přímého API volání
+    // (např. po HMR / bez navigation), interceptor zaručí redirect.
+    // /login NEVYJÍMÁME — když máš stale session a otevřeš /login, redirect
+    // na /setup-totp je správný.
+    if (status === 403 && code === 'totp_setup_required') {
+      if (window.location.pathname !== '/setup-totp') {
+        window.location.href = '/setup-totp'
+      }
+    }
 
     // 503 config_missing / bootstrap_failed = backend není nakonfigurovaný
     // (chybí cfg.php nebo nelze do DB). Zobrazíme fullscreen overlay s návodem,

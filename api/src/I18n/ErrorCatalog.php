@@ -64,6 +64,7 @@ final class ErrorCatalog
         'Parametr month musí být YYYY-MM.' => 'Parameter "month" must be YYYY-MM.',
         'Platnost tokenu vypršela.' => 'Token has expired.',
         'Pouze admin nebo účetní.' => 'Admin or accountant only.',
+        'Pro pokračování je nutné aktivovat dvoufaktorové ověření.' => 'You must activate two-factor authentication to continue.',
         'Proforma musí být označená jako zaplacená.' => 'Proforma must be marked as paid.',
         'Příliš mnoho pokusů. Zkus to později.' => 'Too many attempts. Try again later.',
         'Setup již proběhl.' => 'Setup has already been completed.',

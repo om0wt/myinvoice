@@ -72,7 +72,12 @@
     "totp_setup_step2": "2. Zadej 6místný kód, který aplikace zobrazí, pro aktivaci.",
     "totp_enable_btn": "Aktivovat TOTP",
     "totp_enabled_done": "TOTP aktivováno. Při dalším přihlášení budeš požádán o kód.",
-    "totp_disable_hint": "Pro deaktivaci kontaktuj admina (reset se provádí ručně v DB).",
+    "totp_disable_hint": "Pro deaktivaci kontaktuj admina (reset CLI: php api/bin/reset-2fa.php <email>).",
+    "totp_force_title": "Aktivuj dvoufaktorové ověření",
+    "totp_force_intro": "Administrátor vyžaduje 2FA pro všechny uživatele. Bez aktivního TOTP nelze pokračovat do aplikace. Naskenuj QR kód v autentikační aplikaci a potvrď 6místným kódem.",
+    "totp_force_enable_btn": "Aktivovat a pokračovat",
+    "totp_force_logout_hint": "Pokud nemáš autentikační aplikaci po ruce, můžeš se odhlásit:",
+    "logout": "Odhlásit",
     "captcha_loading": "Počkej prosím, dokud se nenačte CAPTCHA…",
     "captcha_failed": "CAPTCHA selhala, zkuste znovu.",
     "too_many_attempts": "Příliš mnoho pokusů. Zkuste to později.",
@@ -921,7 +926,9 @@
     "create_admin": "Vytvořit admin účet",
     "sample_label": "Vygenerovat ukázková data",
     "sample_hint": "5 klientů, 8 zakázek, 20 faktur a 4 dobropisy za poslední 2 měsíce. Pro vyzkoušení aplikace. Lze později smazat přes admin/reset.",
-    "sample_done": "Vygenerováno: {clients} klientů, {projects} zakázek, {invoices} faktur, {credit_notes} dobropisů."
+    "sample_done": "Vygenerováno: {clients} klientů, {projects} zakázek, {invoices} faktur, {credit_notes} dobropisů.",
+    "require_totp_label": "Vynutit dvoufaktorové ověření (2FA) pro všechny uživatele",
+    "require_totp_hint": "Po přihlášení bude každý uživatel přesměrován na nastavení TOTP, dokud 2FA neaktivuje. Volbu lze později změnit v cfg.local.php (auth.require_totp)."
   },
   "validation": {
     "required": "Povinné pole",

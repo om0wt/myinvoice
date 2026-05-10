@@ -54,6 +54,8 @@ use MyInvoice\Bootstrap;
 use MyInvoice\Infrastructure\Config\Config;
 use MyInvoice\Infrastructure\Database\Connection;
 use MyInvoice\Service\Ares\AresClient;
+use MyInvoice\Service\Auth\PasswordHasher;
+use MyInvoice\Service\Config\CfgLocalWriter;
 use Monolog\Logger;
 
 // === Krok 2: načti config ===
@@ -156,11 +158,21 @@ while (strlen($adminPass) < 12) {
 }
 
 echo "\n================================================\n";
+echo "  BEZPEČNOST\n";
+echo "================================================\n";
+echo "  Vynucení 2FA (TOTP) pro VŠECHNY uživatele po přihlášení?\n";
+echo "  Doporučeno pro produkci. Po loginu budeš zamčen na /setup-totp,\n";
+echo "  dokud neaktivuješ 2FA v autentikační aplikaci.\n";
+$requireTotpAns = strtolower(prompt('Vynutit 2FA? (ano/NE)', 'ne'));
+$requireTotp = in_array($requireTotpAns, ['ano', 'a', 'y', 'yes', 'true'], true);
+
+echo "\n================================================\n";
 echo "  Shrnutí:\n";
 echo "    Firma:  {$supplier['company_name']} ({$supplier['ic']})\n";
 echo "    Adresa: {$supplier['street']}, {$supplier['zip']} {$supplier['city']}\n";
 echo "    Email:  {$supplier['email']}\n";
 echo "    Admin:  {$adminName} <{$adminEmail}>\n";
+echo "    2FA:    " . ($requireTotp ? 'VYNUCENO pro všechny uživatele' : 'volitelné (per-user)') . "\n";
 echo "================================================\n";
 $confirm = prompt('Pokračovat? (ANO/ne)', 'ANO');
 if ($confirm !== 'ANO') {
@@ -227,12 +239,16 @@ try {
         ->execute([$defaultCurrencyId, $supplierId]);
     $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
 
+    // POZOR: hash MUSÍ projít přes PasswordHasher (bcrypt cost 12 + pepper z cfg.app.pepper),
+    // protože LoginAction ověřuje pomocí PasswordHasher::verify() s pepperem.
+    // Pure password_hash() bez pepperu by produkoval hash, který nikdy nematchne při loginu.
+    $hasher = new PasswordHasher($config);
     $pdo->prepare(
         'INSERT INTO users (email, password_hash, name, role, locale, is_active)
          VALUES (?, ?, ?, "admin", "cs", 1)'
     )->execute([
         $adminEmail,
-        password_hash($adminPass, PASSWORD_BCRYPT),
+        $hasher->hash($adminPass),
         $adminName,
     ]);
 
@@ -243,9 +259,23 @@ try {
     exit(1);
 }
 
+// === Volitelně: zapiš require_totp do cfg.local.php ===
+if ($requireTotp) {
+    try {
+        CfgLocalWriter::setKeys($rootDir, ['auth.require_totp' => true]);
+        echo "\n🔒  Vynucení 2FA zapsáno do cfg.local.php (auth.require_totp = true).\n";
+    } catch (\Throwable $e) {
+        echo "\n⚠   Nepodařilo se zapsat cfg.local.php: " . $e->getMessage() . "\n";
+        echo "    Otevři ručně cfg.php a nastav: 'auth' => ['require_totp' => true].\n";
+    }
+}
+
 echo "\n✅  Hotovo.\n";
 echo "    Přihlas se na " . $config->get('app.url', '/') . "/login\n";
 echo "    Email: $adminEmail\n";
+if ($requireTotp) {
+    echo "    Po přihlášení budeš přesměrován na /setup-totp pro aktivaci 2FA.\n";
+}
 echo "    Bankovní účet pro CZK doplň v Systém → Nastavení.\n\n";
 
 // === Helpers ===

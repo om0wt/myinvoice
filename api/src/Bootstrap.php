@@ -14,6 +14,7 @@ use MyInvoice\Middleware\CsrfMiddleware;
 use MyInvoice\Middleware\FirstRunLockMiddleware;
 use MyInvoice\Middleware\IpAllowlistMiddleware;
 use MyInvoice\Middleware\RateLimitMiddleware;
+use MyInvoice\Middleware\RequireTotpMiddleware;
 use MyInvoice\Middleware\RoleMiddleware;
 use MyInvoice\Middleware\SupplierScopeMiddleware;
 use Monolog\Handler\RotatingFileHandler;
@@ -89,7 +90,7 @@ final class Bootstrap
 
         // Slim 4 LIFO: poslední `add()` = NEJVĚTŠÍ vrstva = běží JAKO PRVNÍ.
         // Cílový order běhu (outside → inside):
-        //   IpAllowlist → FirstRunLock → Auth → Role → RateLimit → CSRF → Routing → BodyParsing → Action
+        //   IpAllowlist → FirstRunLock → Auth → RequireTotp → Role → RateLimit → CSRF → Routing → BodyParsing → Action
         // → add() v opačném pořadí (innermost první):
         $app->addBodyParsingMiddleware();                            // innermost
         $app->addRoutingMiddleware();
@@ -97,6 +98,7 @@ final class Bootstrap
         $app->add($container->get(RateLimitMiddleware::class));      // chrání forgot/setup/login/ARES + obecné limity
         $app->add($container->get(SupplierScopeMiddleware::class));  // multi-supplier scope (X-Supplier-Id)
         $app->add($container->get(RoleMiddleware::class));           // RBAC — kontrola role po Auth
+        $app->add($container->get(RequireTotpMiddleware::class));    // vynucení 2FA pokud cfg.auth.require_totp=true
         $app->add($container->get(AuthMiddleware::class));           // načte session/usera
         $app->add($container->get(FirstRunLockMiddleware::class));   // 423 pokud users prázdná
         $app->add($container->get(IpAllowlistMiddleware::class));    // outermost user mw

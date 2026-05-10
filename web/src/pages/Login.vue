@@ -29,6 +29,14 @@ onMounted(async () => {
     router.replace('/setup')
     return
   }
+  // Stale session detection: pokud uživatel přijde na /login s platnou cookie,
+  // hodíme ho rovnou kam patří (`/` nebo `/setup-totp`). Bez toho by submit
+  // formuláře probíhal v rozjetém stavu a UX by byl matoucí.
+  const stillAuthed = await auth.refresh()
+  if (stillAuthed) {
+    router.replace(auth.mustSetupTotp ? '/setup-totp' : '/')
+    return
+  }
   if (auth.setupStatus?.captcha.provider === 'turnstile') {
     captchaSiteKey.value = auth.setupStatus.captcha.site_key
     captchaScriptUrl.value = auth.setupStatus.captcha.script_url

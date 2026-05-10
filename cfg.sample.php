@@ -54,6 +54,14 @@ return [
         'cookie_secure' => true,                     // true vyžaduje HTTPS — false jen pro lokální HTTP dev (a __Host- nebude fungovat)
         'cookie_samesite' => 'Lax',                  // 'Lax' | 'Strict' | 'None' (None vyžaduje secure=true)
     ],
+    'auth' => [
+        // true = vynutit TOTP (2FA) pro VŠECHNY uživatele. Po loginu, pokud uživatel
+        // ještě nemá totp_enabled=1, je zamčen na stránce /setup-totp dokud 2FA
+        // neaktivuje. Single escape route je odhlášení. Doporučeno pro produkci
+        // s citlivými daty. Vyžaduje validní `app.secret_encryption_key` (jinak
+        // by uživatelé skončili v silent-500 — viz health warning).
+        'require_totp' => false,
+    ],
     'smtp' => [
         // Connection
         'host'           => 'smtp.example.com',

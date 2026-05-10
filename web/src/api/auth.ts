@@ -6,6 +6,8 @@ export interface User {
   name: string
   role: 'admin' | 'accountant' | 'readonly'
   locale: 'cs' | 'en'
+  totp_enabled?: boolean
+  must_setup_totp?: boolean
 }
 
 export interface SupplierBrief {
@@ -41,6 +43,8 @@ export interface TotpSetup {
 
 export interface SetupPayload {
   admin: { name: string; email: string; password: string }
+  /** Volitelné: vynutit 2FA (TOTP) pro všechny uživatele. Zapíše do cfg.local.php. */
+  require_totp?: boolean
   supplier?: {
     company_name: string
     display_name?: string
@@ -72,7 +76,10 @@ export const authApi = {
   setupStatus: () => api.get<SetupStatus>('/auth/setup-status').then((r) => r.data),
 
   setup: (payload: SetupPayload) =>
-    api.post<{ user: User; next: string; csrf_token: string }>('/auth/setup', payload).then((r) => {
+    api.post<{ user: User; next: string; csrf_token: string; require_totp?: boolean; cfg_local_written?: boolean }>(
+      '/auth/setup',
+      payload,
+    ).then((r) => {
       // Po setup je session vytvořená (auto-login). Uložit CSRF token, aby další POST volání projely.
       if (r.data.csrf_token) setCsrfToken(r.data.csrf_token)
       return r.data
@@ -105,6 +112,7 @@ export const authApi = {
       csrf_token: string
       current_supplier_id: number
       suppliers: SupplierBrief[]
+      require_totp?: boolean
     }>('/auth/me').then((r) => {
       setCsrfToken(r.data.csrf_token)
       return r.data

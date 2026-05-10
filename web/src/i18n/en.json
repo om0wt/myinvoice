@@ -72,7 +72,12 @@
     "totp_setup_step2": "2. Enter the 6-digit code from the app to activate.",
     "totp_enable_btn": "Activate TOTP",
     "totp_enabled_done": "TOTP activated. You'll be prompted for a code on next login.",
-    "totp_disable_hint": "To disable, contact an admin (reset is done manually in DB).",
+    "totp_disable_hint": "To disable, contact an admin (reset CLI: php api/bin/reset-2fa.php <email>).",
+    "totp_force_title": "Set up two-factor authentication",
+    "totp_force_intro": "The administrator requires 2FA for all users. Without an active TOTP you cannot continue. Scan the QR code in your authenticator app and confirm with the 6-digit code.",
+    "totp_force_enable_btn": "Activate and continue",
+    "totp_force_logout_hint": "If you don't have your authenticator handy, you can sign out:",
+    "logout": "Sign out",
     "captcha_loading": "Please wait until CAPTCHA loads…",
     "captcha_failed": "CAPTCHA failed, try again.",
     "too_many_attempts": "Too many attempts. Try again later.",
@@ -921,7 +926,9 @@
     "create_admin": "Create admin account",
     "sample_label": "Generate sample data",
     "sample_hint": "5 clients, 8 projects, 20 invoices and 4 credit notes from the last 2 months. For trying out the app. Can be wiped later via admin/reset.",
-    "sample_done": "Generated: {clients} clients, {projects} projects, {invoices} invoices, {credit_notes} credit notes."
+    "sample_done": "Generated: {clients} clients, {projects} projects, {invoices} invoices, {credit_notes} credit notes.",
+    "require_totp_label": "Require two-factor authentication (2FA) for all users",
+    "require_totp_hint": "After login, every user will be redirected to TOTP setup until they activate 2FA. You can change this later in cfg.local.php (auth.require_totp)."
   },
   "validation": {
     "required": "Required field",

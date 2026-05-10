@@ -76,6 +76,43 @@ WHERE email = 'tvuj@email.cz';
 > (phpMyAdmin / Adminer / mysql CLI) připravený předem. Při ztrátě telefonu
 > by jinak nikdo nešel do aplikace.
 
+### 18.2.4 Vynucení 2FA pro všechny uživatele
+
+Pokud chceš, aby **každý** uživatel po přihlášení musel mít aktivní TOTP,
+nastav v `cfg.php` (nebo `cfg.local.php`):
+
+```php
+'auth' => [
+    'require_totp' => true,
+],
+```
+
+Stejné lze přepnout přes ENV (Docker / PaaS):
+
+```bash
+MYINVOICE_AUTH_REQUIRE_TOTP=true
+```
+
+Chování:
+
+- Po loginu (s heslem, bez TOTP) je uživatel přesměrován na `/setup-totp`,
+  kde naskenuje QR a aktivuje 2FA. Před aktivací není přístup do žádné
+  jiné části aplikace.
+- Backend tvrdě blokuje volání všech endpointů kromě
+  `/api/auth/me`, `/api/auth/logout` a `/api/auth/totp/*`. Frontend bypass
+  není možný.
+- Jediná „escape route" je odhlášení (tlačítko na `/setup-totp`).
+
+> 💡 Volbu lze zapnout i v instalačních skriptech:
+> - **CLI**: `php api/bin/setup.php` se ptá *„Vynutit 2FA?"* a v případě
+>   souhlasu zapíše `auth.require_totp = true` do `cfg.local.php`.
+> - **Web wizard** (`/setup`): checkbox v kroku „Admin účet" má stejný
+>   efekt; po dokončení je admin rovnou přesměrován na `/setup-totp`.
+
+> ⚠️ Vyžaduje validní `app.secret_encryption_key` (32B base64). Při špatné
+> konfiguraci by uživatelé skončili v silent-500 — health endpoint vrací
+> warning, viz [§ 99 Řešení problémů](99_Reseni_problemu.md).
+
 ## 18.3 Brute-force ochrana
 
 | Pokusy během | Akce |

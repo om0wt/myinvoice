@@ -212,6 +212,9 @@ final class Config
             'MYINVOICE_SESSION_COOKIE_SECURE'=> ['session.cookie_secure', 'bool'],
             'MYINVOICE_SESSION_SAMESITE'     => ['session.cookie_samesite', 'string'],
 
+            // Auth
+            'MYINVOICE_AUTH_REQUIRE_TOTP'    => ['auth.require_totp', 'bool'],
+
             // SMTP
             'MYINVOICE_SMTP_HOST'       => ['smtp.host', 'string'],
             'MYINVOICE_SMTP_PORT'       => ['smtp.port', 'int'],

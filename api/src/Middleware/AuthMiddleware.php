@@ -59,13 +59,14 @@ final class AuthMiddleware implements MiddlewareInterface
 
         if ($session !== null) {
             // Načti aktivního usera
-            $stmt = $this->db->pdo()->prepare('SELECT id, email, name, role, locale, is_active FROM users WHERE id = ?');
+            $stmt = $this->db->pdo()->prepare('SELECT id, email, name, role, locale, is_active, totp_enabled FROM users WHERE id = ?');
             $stmt->execute([$session['user_id']]);
             $user = $stmt->fetch(\PDO::FETCH_ASSOC);
 
             if ($user && (int) $user['is_active'] === 1) {
-                $user['id']        = (int) $user['id'];
-                $user['is_active'] = (bool) $user['is_active'];
+                $user['id']           = (int) $user['id'];
+                $user['is_active']    = (bool) $user['is_active'];
+                $user['totp_enabled'] = (int) ($user['totp_enabled'] ?? 0) === 1;
                 Locale::set((string) ($user['locale'] ?? 'cs'));
                 $request = $request
                     ->withAttribute(self::ATTR_USER, $user)

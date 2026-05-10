@@ -17,6 +17,7 @@ const error = ref('')
 const fieldErrors = ref<Record<string, string[]>>({})
 
 const admin = ref({ name: '', email: '', password: '', password_confirm: '' })
+const requireTotp = ref(false)
 const skipSupplier = ref(false)
 const generateSample = ref(false)
 const sampleResult = ref<{ clients: number; projects: number; invoices: number; credit_notes: number } | null>(null)
@@ -119,6 +120,7 @@ async function submit() {
         email: admin.value.email.trim(),
         password: admin.value.password,
       },
+      require_totp: requireTotp.value,
     }
     if (!skipSupplier.value && supplier.value.company_name.trim()) {
       payload.supplier = {
@@ -231,6 +233,20 @@ async function submit() {
               <p v-if="admin.password_confirm && !passwordMatch" class="text-xs text-danger-500 mt-1">
                 {{ t('auth.passwords_dont_match') }}
               </p>
+            </div>
+
+            <div class="pt-2 border-t border-neutral-200">
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  v-model="requireTotp"
+                  type="checkbox"
+                  class="mt-1 h-4 w-4 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span class="text-sm">
+                  <span class="font-medium text-neutral-800">{{ t('setup.require_totp_label') }}</span>
+                  <span class="block text-xs text-neutral-500 mt-0.5">{{ t('setup.require_totp_hint') }}</span>
+                </span>
+              </label>
             </div>
 
             <button type="submit" :disabled="!adminValid" class="w-full h-10 bg-primary-600 hover:bg-primary-700 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white font-medium rounded-md transition">
@@ -379,6 +395,12 @@ async function submit() {
           </div>
           <h2 class="text-xl font-semibold mb-2">{{ t('common.success') }}</h2>
           <p class="text-neutral-500 mb-2">{{ locale === 'cs' ? 'Admin účet byl vytvořen a jste přihlášen.' : 'Admin account created and you are signed in.' }}</p>
+
+          <div v-if="requireTotp" class="mb-6 inline-block bg-warning-50 border border-warning-500/40 rounded-md px-4 py-2 text-sm text-warning-700 text-left">
+            {{ locale === 'cs'
+              ? 'Vynucení 2FA je aktivní. Po pokračování budeš přesměrován na nastavení TOTP.'
+              : '2FA enforcement is active. You will be redirected to TOTP setup next.' }}
+          </div>
 
           <div v-if="sampleResult" class="mb-6 inline-block bg-success-50 border border-success-500/40 rounded-md px-4 py-2 text-sm text-success-600 text-left">
             {{ t('setup.sample_done', sampleResult) }}

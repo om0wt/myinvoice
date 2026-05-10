@@ -38,6 +38,7 @@ const routes: RouteRecordRaw[] = [
   },
   { path: '/login',  name: 'login',  component: () => import('@/pages/Login.vue'),          meta: { public: true } },
   { path: '/setup',  name: 'setup',  component: () => import('@/pages/Setup.vue'),          meta: { public: true } },
+  { path: '/setup-totp', name: 'setup-totp', component: () => import('@/pages/ForcedTotpSetup.vue'), meta: { requiresAuth: true, totpSetupOnly: true } },
   { path: '/forgot', name: 'forgot', component: () => import('@/pages/ForgotPassword.vue'), meta: { public: true } },
   { path: '/reset',  name: 'reset',  component: () => import('@/pages/ResetPassword.vue'),  meta: { public: true } },
   { path: '/approval/:token([a-f0-9]{32,128})', name: 'approval',
@@ -76,6 +77,16 @@ router.beforeEach(async (to) => {
   if (requiresAuth && !auth.isAuthenticated) {
     const ok = await auth.refresh()
     if (!ok) return { name: 'login' }
+  }
+
+  // Vynucení 2FA: pokud cfg.auth.require_totp = true a uživatel nemá TOTP,
+  // přesměruj všechny privátní routes na /setup-totp (kromě samotné /setup-totp).
+  if (auth.isAuthenticated && auth.mustSetupTotp && to.name !== 'setup-totp' && requiresAuth) {
+    return { name: 'setup-totp' }
+  }
+  // Naopak když TOTP aktivovaný, /setup-totp už nedává smysl.
+  if (auth.isAuthenticated && !auth.mustSetupTotp && to.name === 'setup-totp') {
+    return { name: 'home' }
   }
 
   // Admin-only stránky

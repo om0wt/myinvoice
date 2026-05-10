@@ -11,6 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => user.value !== null)
   const needsSetup = computed(() => setupStatus.value?.needs_setup === true)
+  const mustSetupTotp = computed(() => user.value?.must_setup_totp === true)
 
   async function fetchSetupStatus() {
     setupStatus.value = await authApi.setupStatus()
@@ -66,6 +67,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     isAuthenticated,
     needsSetup,
+    mustSetupTotp,
     fetchSetupStatus,
     refresh,
     login,

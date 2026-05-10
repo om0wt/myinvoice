@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace MyInvoice\Action\Auth;
 
+use MyInvoice\Bootstrap;
 use MyInvoice\Http\Json;
 use MyInvoice\Infrastructure\Config\Config;
 use MyInvoice\Infrastructure\Database\Connection;
 use MyInvoice\Service\ActivityLogger;
 use MyInvoice\Service\Auth\PasswordHasher;
 use MyInvoice\Service\Auth\SessionManager;
+use MyInvoice\Service\Config\CfgLocalWriter;
 use MyInvoice\Service\IpMatcher;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -33,6 +35,7 @@ final class SetupAction
         $body = (array) ($request->getParsedBody() ?? []);
         $admin = (array) ($body['admin'] ?? []);
         $supplier = isset($body['supplier']) && is_array($body['supplier']) ? $body['supplier'] : null;
+        $requireTotp = !empty($body['require_totp']);
 
         $errors = $this->validate($admin, $supplier);
         if (!empty($errors)) {
@@ -77,12 +80,28 @@ final class SetupAction
             $this->logger->log('setup.completed', $userId, 'user', $userId, [
                 'email' => $admin['email'],
                 'has_supplier' => $supplier !== null,
+                'require_totp' => $requireTotp,
             ], $ip, $request->getHeaderLine('User-Agent'));
 
             $pdo->commit();
         } catch (\PDOException $e) {
             $pdo->rollBack();
             return Json::error($response, 'setup_failed', $e->getMessage(), 500);
+        }
+
+        // Pokud uživatel zaškrtl "vynutit 2FA", zapiš to do cfg.local.php
+        // (Config::load merguje cfg.local.php přes cfg.php). Selhání zápisu
+        // setup nezruší — vrátíme jen flag a uživatele instruujeme manuálně.
+        $cfgLocalWritten = false;
+        if ($requireTotp) {
+            try {
+                CfgLocalWriter::setKeys(Bootstrap::rootDir(), ['auth.require_totp' => true]);
+                $cfgLocalWritten = true;
+            } catch (\Throwable $e) {
+                $this->logger->log('setup.cfg_local_write_failed', $userId, 'user', $userId, [
+                    'error' => $e->getMessage(),
+                ], $ip, $request->getHeaderLine('User-Agent'));
+            }
         }
 
         // Auto-login: vytvoř session pro nově vzniknklého admina (eliminuje public window pro setup-sample)
@@ -111,7 +130,9 @@ final class SetupAction
                 'role'  => 'admin',
             ],
             'csrf_token' => $session['csrf_token'],
-            'next' => '/login',
+            'next' => $requireTotp ? '/setup-totp' : '/login',
+            'require_totp' => $requireTotp,
+            'cfg_local_written' => $cfgLocalWritten,
         ], 201);
     }
 
