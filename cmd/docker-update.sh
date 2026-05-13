@@ -87,8 +87,21 @@ for i in {1..30}; do
   fi
 done
 
-echo "==> Running database migrations…"
-"${DC[@]}" exec -T app php api/bin/migrate.php
+# Migrace běží automaticky z `docker-entrypoint.sh` před apache2-foreground.
+# Místo druhého explicitního migrate (= race condition s entrypointem) jen
+# čekáme, až app odpoví na /api/health (v ALLOWED_PATHS pro FirstRunLockMiddleware).
+echo "==> Waiting for app to become available (entrypoint runs migrations)…"
+for i in {1..60}; do
+  if curl -fsS -o /dev/null "http://localhost:${APP_PORT:-8080}/api/health"; then
+    echo "    App ready."
+    break
+  fi
+  sleep 2
+  if [[ $i -eq 60 ]]; then
+    echo "ERROR: App failed to respond in 120s. Check '${DC[*]} logs app'." >&2
+    exit 1
+  fi
+done
 
 # --- 4. report -----------------------------------------------------------
 APP_PORT="${APP_PORT:-8080}"

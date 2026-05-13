@@ -12,6 +12,9 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+# Invoke-WebRequest / curl.exe na Windows zobrazuje progress bar, ktery v
+# pollovacim loopu dramaticky zpomaluje kazde volani.
+$ProgressPreference = 'SilentlyContinue'
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $ProjectRoot
 
@@ -111,9 +114,30 @@ if (-not $ready) {
     Write-Error "DB failed to become healthy in 60s. Check 'docker compose logs db'."
 }
 
-Write-Host "==> Running database migrations…"
-& docker compose exec -T app php api/bin/migrate.php
-if ($LASTEXITCODE -ne 0) { Write-Error "Migrations failed" }
+# Migrace se spousti automaticky z docker-entrypoint.sh pred apache2-foreground.
+# Misto druheho explicitniho migrate (= race condition s entrypointem na nekterych
+# migracich, napr. 0015 FK rename — errno 121 duplicate key) jen cekame, az app
+# odpovi na HTTP. /api/health je v ALLOWED_PATHS pro FirstRunLockMiddleware,
+# takze vraci 200 i ve fresh-install state.
+$curl = (Get-Command curl.exe -ErrorAction SilentlyContinue)?.Source
+if (-not $curl) { $curl = 'C:\Windows\System32\curl.exe' }
+if (-not (Test-Path $curl)) {
+    Write-Error "curl.exe nenalezen (potreba na Win 10/11+). Updatuj OS nebo doinstaluj curl."
+}
+
+Write-Host "==> Waiting for app to become available (entrypoint runs migrations)…"
+$appReady = $false
+$lastErr = ''
+for ($i = 1; $i -le 60; $i++) {
+    $out = & $curl -fsS -m 3 -o NUL "http://localhost:$($envVars.APP_PORT)/api/health" 2>&1
+    if ($LASTEXITCODE -eq 0) { $appReady = $true; Write-Host "    App ready."; break }
+    $lastErr = ($out | Out-String).Trim()
+    Start-Sleep -Seconds 2
+}
+if (-not $appReady) {
+    Write-Host "    Last curl error: $lastErr" -ForegroundColor Yellow
+    Write-Error "App failed to respond in 120s. Check 'docker compose logs app'."
+}
 
 # --- 6. report -------------------------------------------------------------
 $port = $envVars.APP_PORT

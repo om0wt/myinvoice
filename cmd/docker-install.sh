@@ -106,8 +106,23 @@ for i in {1..30}; do
   fi
 done
 
-echo "==> Running database migrations…"
-docker compose exec -T app php api/bin/migrate.php
+# Migrace se spouští automaticky z `docker-entrypoint.sh` před apache2-foreground.
+# Místo druhého explicitního migrate (= race condition s entrypointem na některých
+# migracích, např. 0015 FK rename — errno 121 duplicate key) jen čekáme, až app
+# odpoví na HTTP. /api/health je v ALLOWED_PATHS pro FirstRunLockMiddleware, takže
+# vrací 200 i ve fresh-install state.
+echo "==> Waiting for app to become available (entrypoint runs migrations)…"
+for i in {1..60}; do
+  if curl -fsS -o /dev/null "http://localhost:${APP_PORT}/api/health"; then
+    echo "    App ready."
+    break
+  fi
+  sleep 2
+  if [[ $i -eq 60 ]]; then
+    echo "ERROR: App failed to respond in 120s. Check 'docker compose logs app'." >&2
+    exit 1
+  fi
+done
 
 # --- 6. report -------------------------------------------------------------
 APP_PORT="${APP_PORT:-8080}"

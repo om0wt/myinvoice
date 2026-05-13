@@ -16,6 +16,7 @@
 param()
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $ProjectRoot
 
@@ -102,13 +103,32 @@ if (-not $ready) {
     Write-Error "DB failed to become healthy in 60s. Check 'docker compose logs db'."
 }
 
-Write-Host "==> Running database migrations..."
-& docker compose @composeArgs exec -T app php api/bin/migrate.php
-if ($LASTEXITCODE -ne 0) { Write-Error "Migrations failed" }
+# Migrace bezi automaticky z docker-entrypoint.sh pred apache2-foreground.
+# Misto druheho explicitniho migrate (= race condition s entrypointem) cekame,
+# az app odpovi na /api/health (v ALLOWED_PATHS pro FirstRunLockMiddleware).
+$curl = (Get-Command curl.exe -ErrorAction SilentlyContinue)?.Source
+if (-not $curl) { $curl = 'C:\Windows\System32\curl.exe' }
+if (-not (Test-Path $curl)) {
+    Write-Error "curl.exe nenalezen (potreba na Win 10/11+). Updatuj OS nebo doinstaluj curl."
+}
 
-# --- 4. report -----------------------------------------------------------
 $port = $envVars.APP_PORT
 if (-not $port) { $port = '8080' }
+Write-Host "==> Waiting for app to become available (entrypoint runs migrations)..."
+$appReady = $false
+$lastErr = ''
+for ($i = 1; $i -le 60; $i++) {
+    $out = & $curl -fsS -m 3 -o NUL "http://localhost:$port/api/health" 2>&1
+    if ($LASTEXITCODE -eq 0) { $appReady = $true; Write-Host "    App ready."; break }
+    $lastErr = ($out | Out-String).Trim()
+    Start-Sleep -Seconds 2
+}
+if (-not $appReady) {
+    Write-Host "    Last curl error: $lastErr" -ForegroundColor Yellow
+    Write-Error "App failed to respond in 120s. Check 'docker compose @composeArgs logs app'."
+}
+
+# --- 4. report -----------------------------------------------------------
 Write-Host ""
 Write-Host "============================================================"
 Write-Host " Update complete. App: http://localhost:$port"
