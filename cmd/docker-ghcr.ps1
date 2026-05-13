@@ -3,8 +3,8 @@
 #   1. Vygeneruje .env s random DB hesly (pokud chybi)
 #   2. Vygeneruje cfg.docker.php z cfg.sample.php s random secrets (pokud chybi)
 #   3. docker compose pull (image z ghcr.io/radekhulan/myinvoice:latest)
-#   4. docker compose up -d
-#   5. Pocka na DB health a spusti migrace
+#   4. docker compose up -d (entrypoint sam spusti migrace pred apache2-foreground)
+#   5. Pocka az app odpovi na HTTP (= migrace dobehly, apache bezi)
 #   6. Vypise URL k setup wizardu
 #
 # Pouziva docker-compose.production.yml (image pull, zadny build).
@@ -112,9 +112,21 @@ if (-not $ready) {
     Write-Error "DB failed to become healthy in 60s. Check 'docker compose -f $ComposeFile logs db'."
 }
 
-Write-Host "==> Running database migrations..."
-Invoke-Compose exec -T app php api/bin/migrate.php
-if ($LASTEXITCODE -ne 0) { Write-Error "Migrations failed" }
+# Migrace se spousti automaticky z docker-entrypoint.sh pred apache2-foreground.
+# Misto druheho explicitniho migrate (= race condition s entrypointem, viz issue
+# s duplicate PK v `migrations` tabulce) jen cekame, az app odpovi na HTTP.
+Write-Host "==> Waiting for app to become available (entrypoint runs migrations)..."
+$ready = $false
+for ($i = 1; $i -le 60; $i++) {
+    try {
+        $resp = Invoke-WebRequest -Uri "http://localhost:$($envVars.APP_PORT)/api/version" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+        if ($resp.StatusCode -eq 200) { $ready = $true; Write-Host "    App ready."; break }
+    } catch {}
+    Start-Sleep -Seconds 2
+}
+if (-not $ready) {
+    Write-Error "App failed to respond in 120s. Check 'docker compose -f $ComposeFile logs app'."
+}
 
 # --- 6. report -----------------------------------------------------------
 $port = $envVars.APP_PORT

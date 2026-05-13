@@ -92,10 +92,20 @@ foreach ($pending as $file) {
 
     $durationMs = (int) ((microtime(true) - $start) * 1000);
 
-    $stmt = $db->prepare('INSERT INTO migrations (filename, duration_ms) VALUES (?, ?)');
+    // INSERT IGNORE: pokud dva migrate procesy běží paralelně (např. docker-entrypoint.sh
+    // + explicitní `docker compose exec ... migrate.php`), oba mohou považovat stejný
+    // soubor za pending. Migrace samotné jsou idempotentní (CREATE TABLE IF NOT EXISTS,
+    // ALTER ... IF EXISTS, atd.), takže druhý běh nezmění schema. IGNORE pak zamezí
+    // crash na duplicate PK v této bookkeeping tabulce.
+    $stmt = $db->prepare('INSERT IGNORE INTO migrations (filename, duration_ms) VALUES (?, ?)');
     $stmt->execute([$name, $durationMs]);
+    $alreadyRecorded = $stmt->rowCount() === 0;
 
-    echo "OK ({$durationMs} ms)\n";
+    if ($alreadyRecorded) {
+        echo "OK ({$durationMs} ms, already recorded — race with another migrator)\n";
+    } else {
+        echo "OK ({$durationMs} ms)\n";
+    }
 }
 
 echo "Hotovo.\n";

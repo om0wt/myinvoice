@@ -68,7 +68,9 @@ Options -Indexes -MultiViews
     Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), accelerometer=(self \"https://challenges.cloudflare.com\"), gyroscope=(self \"https://challenges.cloudflare.com\"), magnetometer=(self \"https://challenges.cloudflare.com\"), xr-spatial-tracking=(self \"https://challenges.cloudflare.com\")"
     Header always set Cross-Origin-Opener-Policy "same-origin"
     Header always set Cross-Origin-Resource-Policy "same-site"
-    Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; font-src 'self'; connect-src 'self'; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    # CSP: doplněno unpkg.com (Swagger UI) + cdn.redoc.ly (Redoc) pro /api/docs a /api/reference.
+    # Sladěno s web.config (IIS). worker-src 'self' blob: je nutné pro Swagger UI tryItOut request snippety.
+    Header always set Content-Security-Policy "default-src 'self'; img-src 'self' data: https://validator.swagger.io https://cdn.redoc.ly; style-src 'self' 'unsafe-inline' https://unpkg.com; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://unpkg.com https://cdn.redoc.ly; worker-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://unpkg.com https://cdn.redoc.ly; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     Header unset Server
     Header unset X-Powered-By
 </IfModule>
@@ -95,7 +97,10 @@ Options -Indexes -MultiViews
 # Blokovat citlivé soubory.
 # .md zdroje manuálu jsou blokované přímým přístupem — uživatel je dostane jen
 # v HTML rendru přes /manual (PHP fopen čte filesystem, ne přes HTTP).
-<FilesMatch "\.(env|sql|pem|log|lock|md|yaml|yml)$">
+# Pozn.: `yaml|yml` schválně NENÍ v seznamu — `api/openapi.yaml` je veřejný
+# OpenAPI spec a musí jít fetchnout (Swagger UI / Redoc). Ostatní .yaml soubory
+# jsou v `api/vendor/` a `web/node_modules/`, kde je blokuje rewrite rule výše.
+<FilesMatch "\.(env|sql|pem|log|lock|md)$">
     Require all denied
 </FilesMatch>
 
@@ -112,6 +117,9 @@ Options -Indexes -MultiViews
     AddType font/woff2 .woff2
     AddType font/woff  .woff
     AddType image/svg+xml .svg
+    # OpenAPI spec — Apache by jinak vrátil .yaml jako application/octet-stream
+    # (= browser stáhne místo zobrazení). Swagger UI / Redoc fetchne přes /api/openapi.yaml.
+    AddType application/yaml .yaml
 </IfModule>
 
 # Komprimace

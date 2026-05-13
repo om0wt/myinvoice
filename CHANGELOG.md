@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.4.3] — 2026-05-13
+
+### Fixed
+
+- **Docker: `/api/docs` (Swagger UI) a `/api/reference` (Redoc) padaly na CSP +
+  403 pro `/api/openapi.yaml`.** Apache `.htaccess` nezrcadlil IIS `web.config`
+  ohledně CSP pro externí CDN a navíc blokoval `.yaml` extension globálně:
+  - CSP doplněn o `https://unpkg.com` (Swagger UI bundle + CSS) a
+    `https://cdn.redoc.ly` (Redoc bundle + logo) v `script-src`, `style-src`,
+    `connect-src` (sourcemapy) a `img-src` (Redoc logo). Plus `worker-src
+    'self' blob:` pro Swagger workers a `font-src ... data:` pro embedded
+    fonty. Sladěno s `web.config`.
+  - `<FilesMatch "\.(env|sql|pem|log|lock|md|yaml|yml)$">` zablokoval i
+    veřejný `api/openapi.yaml` → 403. `yaml|yml` z patternu odebráno; ostatní
+    .yaml soubory jsou v `api/vendor/` a `web/node_modules/`, kde je už blokují
+    rewrite rules.
+  - Přidán MIME `AddType application/yaml .yaml`, aby browser nestáhl spec
+    jako binární soubor.
+
+- **Migrace: duplicate PRIMARY KEY na `migrations` tabulce při souběžném běhu.**
+  `docker-entrypoint.sh` pouští `migrate.php` při startu kontejneru a
+  `docker-ghcr.sh` ho pouštěl ještě jednou přes `docker compose exec`. Pokud
+  oba procesy považovaly stejný soubor za pending, druhý padal na
+  `INSERT INTO migrations` (race condition). Migrace samotné jsou idempotentní,
+  takže schéma nebylo nikdy poškozené — jen skript skončil chybou.
+  - `INSERT IGNORE` v bookkeeping tabulce — druhý migrátor tiše doběhne s
+    poznámkou `already recorded — race with another migrator`.
+  - `cmd/docker-ghcr.{sh,ps1}` už nespouštějí `migrate.php` druhým procesem;
+    místo toho čekají na HTTP 200 z `/api/version` (entrypoint dokončí
+    migrace před `apache2-foreground`).
+
+### Internal
+
+- `web.config` (IIS) — CSP přidáno `https://cdn.redoc.ly` do `img-src` a
+  `connect-src` pro parity s Apache `.htaccess`.
+
+---
+
 ## [3.4.2] — 2026-05-13
 
 ### Fixed

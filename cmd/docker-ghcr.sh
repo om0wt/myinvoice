@@ -4,8 +4,8 @@
 #   1. Vygeneruje .env s random DB hesly (pokud chybí)
 #   2. Vygeneruje cfg.docker.php z cfg.sample.php s random secrets (pokud chybí)
 #   3. docker compose pull (image z ghcr.io/radekhulan/myinvoice:latest)
-#   4. docker compose up -d
-#   5. Počká na DB health a spustí migrace
+#   4. docker compose up -d (entrypoint sám spustí migrace před apache2-foreground)
+#   5. Počká až app odpoví na HTTP (= migrace doběhly, apache běží)
 #   6. Vypíše URL k setup wizardu
 #
 # Používá docker-compose.production.yml (image pull, žádný build).
@@ -107,8 +107,21 @@ for i in {1..30}; do
   fi
 done
 
-echo "==> Running database migrations…"
-"${COMPOSE[@]}" exec -T app php api/bin/migrate.php
+# Migrace se spouští automaticky z `docker-entrypoint.sh` před apache2-foreground.
+# Místo druhého explicitního migrate (= race condition s entrypointem, viz issue
+# s duplicate PK v `migrations` tabulce) jen čekáme, až app odpoví na HTTP.
+echo "==> Waiting for app to become available (entrypoint runs migrations)…"
+for i in {1..60}; do
+  if curl -fsS -o /dev/null "http://localhost:${APP_PORT}/api/version"; then
+    echo "    App ready."
+    break
+  fi
+  sleep 2
+  if [[ $i -eq 60 ]]; then
+    echo "ERROR: App failed to respond in 120s. Check '${COMPOSE[*]} logs app'." >&2
+    exit 1
+  fi
+done
 
 # --- 6. report -------------------------------------------------------------
 APP_PORT="${APP_PORT:-8080}"
