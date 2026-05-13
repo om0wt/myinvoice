@@ -7,8 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [3.4.2] — 2026-05-13
+
 ### Fixed
 
+- **OpenAPI `openapi.yaml` byla v rozporu s reálným kontraktem backendu.**
+  Field-names a query parametry vrácené v v3.4.0 dokumentaci neodpovídaly tomu,
+  co backend skutečně čte/vrací — integrátor podle staré doc dostal `400` nebo
+  se request mlčky ignoroval. Backend se nemění; jen dokumentace dohnala realitu:
+  - `InvoiceInput`: `type` → `invoice_type` (enum opraven na
+    `invoice|proforma|credit_note|cancellation`, `normal` neexistovalo);
+    `taxable_date` → `tax_date`; přidán `currency_id` (FK, primární),
+    `currency` (string code) ponechán jako `deprecated` legacy fallback;
+    doplněny `varsymbol`, `advance_paid_amount`, `reverse_charge`, `language`,
+    `exchange_rate`, `note_above_items`, `note_below_items`, `project_id`.
+  - `Invoice` (response): stejné renames + `currency_id`, `exchange_rate(_date)`,
+    `totals`, `vat_breakdown`, `czk_recap`, `project_billing_emails`, `bank_*`,
+    `approval_status`, `issued_at`, `paid_at`, `cancelled_at`, `updated_at`.
+  - `InvoiceItem` / `InvoiceItemInput`: `unit_price` → `unit_price_without_vat`;
+    `vat_rate` (procento) → `vat_rate_id` (FK do `/codebooks/vat-rates`,
+    což byl největší zdroj zmatku); `vat_rate_id` přidán do `required`.
+  - `Client` / `ClientInput`: `email` → `main_email` (povinné);
+    přidány `language`, `currency_default_id`, `hourly_rate`, `reverse_charge`,
+    `payment_due_default`.
+  - `ProjectInput.payment_due_days`: `minimum: 0` → `1` (sjednoceno s
+    `Validation::project`, který 0 odmítal).
+  - `GET /invoices` query: `?status=`, `?from=`, `?to=`, `?client_id=` →
+    deep-object `filter[status]`, `filter[date_from]`, `filter[date_to]`,
+    `filter[client_id]`, `filter[type]`, `filter[project_id]`, `filter[year]`,
+    `filter[month]`, `filter[currency]`, `filter[unpaid_only]`,
+    `filter[overdue]` + `q` fulltext. Stará rovinná forma se v handleru
+    vůbec nečetla — filtry byly bez efektu.
+  - `GET /clients` query: `include_archived` → `filter[archived]`; přidány
+    `sort`, `page`, `per_page`.
+
+### Added
+
+- **`GET /api/v1/invoices/preview-varsymbol`** — route existovala od v3.4.0,
+  ale chyběla v `openapi.yaml`. Vrátí náhled budoucího čísla faktury podle
+  template aktuálního supplier-a, bez inkrementace counteru.
 - **Setup wizard z LAN IP / non-localhost hostu vracel 403 `origin_mismatch`**
   (issue #22). `cfg.docker.php` má napevno `app.url = http://localhost:8080`,
   takže přístup z `http://10.0.0.8:8080/setup` (typicky Docker na headless
@@ -19,9 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FirstRunLockMiddleware::needsSetup()`). Po vytvoření admina se ochrana
   okamžitě zapne — setup endpointy mají vlastní first-run guard, který po
   setupu vrací `setup_done`/`setup_already_done`, takže není defense-in-depth riziko.
-
-### Added
-
 - **Auto-detect `app.url` při first-run setupu.** `SetupAction` přečte
   `scheme://host[:port]` z hostiteleho requestu (s X-Forwarded-Proto fallbackem)
   a zapíše do `cfg.local.php`, pokud je v configu prázdná hodnota nebo některý
@@ -35,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Manuál §2.1.4 a §99.1: dokumentuje přístup z LAN IP, env var
   `MYINVOICE_APP_URL` pro pokročilé scénáře (reverzní proxy, custom doména).
+
+### Compatibility note
+
+Žádný backend break — pole/parametry se přejmenovala jen v `openapi.yaml`,
+aby odpovídala tomu, co backend od v3.4.0 odjakživa přijímá. Klient, který
+postavil integraci podle původní (chybné) v3.4.0 doc, ji ve skutečnosti
+neměl funkční (request buď padal na `400 validation_failed`, nebo se filtry
+ignorovaly). v3.4.0 vyšla 2026-05-12, takže pravděpodobnost externí integrace
+proti staré doc je minimální.
 
 ---
 

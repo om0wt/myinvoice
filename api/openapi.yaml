@@ -147,11 +147,22 @@ paths:
         - $ref: '#/components/parameters/SupplierIdHeader'
         - in: query
           name: q
-          description: Fulltextové vyhledávání (název / IČO)
+          description: Fulltextové vyhledávání (název firmy / IČO)
           schema: { type: string }
         - in: query
-          name: include_archived
+          name: filter[archived]
+          description: "1 = jen archivované, 0/chybí = jen aktivní"
           schema: { type: boolean, default: false }
+        - in: query
+          name: sort
+          description: "Řazení (default: name)"
+          schema: { type: string, default: name, enum: [name, created_at, -created_at] }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 5, maximum: 200, default: 50 }
       responses:
         '200':
           description: OK
@@ -163,6 +174,7 @@ paths:
                   clients:
                     type: array
                     items: { $ref: '#/components/schemas/Client' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '429':
@@ -274,31 +286,69 @@ paths:
   /api/v1/invoices:
     get:
       tags: [Invoices]
-      summary: Seznam faktur
+      summary: Seznam faktur (grouped by month)
+      description: |
+        Vrací faktury aktuálního supplier-a, seskupené po měsících podle `issue_date`.
+        Filtry se předávají jako `filter[key]=value` (deep object). `status` a `type` mohou
+        být čárkou oddělené seznamy (`filter[status]=draft,issued`).
       parameters:
         - $ref: '#/components/parameters/SupplierIdHeader'
         - in: query
-          name: status
+          name: q
+          description: Fulltextové vyhledávání (varsymbol, klient, popis)
+          schema: { type: string }
+        - in: query
+          name: filter[status]
+          description: Stav faktury — lze čárkou oddělit více hodnot
           schema:
             type: string
-            enum: [draft, issued, paid, cancelled]
+            example: "draft,issued"
         - in: query
-          name: client_id
+          name: filter[type]
+          description: Typ dokladu — lze čárkou oddělit více hodnot
+          schema:
+            type: string
+            example: "invoice,proforma"
+        - in: query
+          name: filter[client_id]
           schema: { type: integer }
         - in: query
-          name: from
+          name: filter[project_id]
+          schema: { type: integer }
+        - in: query
+          name: filter[year]
+          description: Rok (issue_date)
+          schema: { type: integer, example: 2026 }
+        - in: query
+          name: filter[month]
+          description: Měsíc 1–12 (vyžaduje filter[year])
+          schema: { type: integer, minimum: 1, maximum: 12 }
+        - in: query
+          name: filter[date_from]
           description: Datum vystavení od (YYYY-MM-DD)
           schema: { type: string, format: date }
         - in: query
-          name: to
+          name: filter[date_to]
           description: Datum vystavení do (YYYY-MM-DD)
           schema: { type: string, format: date }
+        - in: query
+          name: filter[currency]
+          description: Kód měny (CZK, EUR, …)
+          schema: { type: string, example: CZK }
+        - in: query
+          name: filter[unpaid_only]
+          description: Pouze nezaplacené (issued + neuhrazené)
+          schema: { type: boolean }
+        - in: query
+          name: filter[overdue]
+          description: Pouze po splatnosti
+          schema: { type: boolean }
         - in: query
           name: page
           schema: { type: integer, minimum: 1, default: 1 }
         - in: query
           name: per_page
-          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+          schema: { type: integer, minimum: 5, maximum: 200, default: 50 }
       responses:
         '200':
           description: OK
@@ -332,6 +382,45 @@ paths:
               schema: { $ref: '#/components/schemas/Invoice' }
         '400':
           $ref: '#/components/responses/ValidationFailed'
+
+  /api/v1/invoices/preview-varsymbol:
+    get:
+      tags: [Invoices]
+      summary: Náhled budoucího čísla faktury
+      description: |
+        Vrátí, jaké číslo (varsymbol) by faktura dostala při vystavení, podle
+        aktuální `invoice_number_template` supplier-a a stávajícího counteru —
+        **bez inkrementace**. Slouží pro náhled v editoru.
+      parameters:
+        - $ref: '#/components/parameters/SupplierIdHeader'
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [invoice, proforma, credit_note]
+            default: invoice
+        - in: query
+          name: issue_date
+          description: Datum vystavení (YYYY-MM-DD). Default = dnes.
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  varsymbol:
+                    type: string
+                    example: "JD2026-01"
+                    description: Prázdný řetězec pokud supplier nemá nastavenou template.
+                  has_template: { type: boolean }
+        '400':
+          description: Chybí zvolený supplier nebo neplatný typ
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/v1/invoices/{id}:
     parameters:
@@ -1778,33 +1867,45 @@ components:
       type: object
       properties:
         id: { type: integer }
+        supplier_id: { type: integer }
         company_name: { type: string }
         display_name: { type: string, nullable: true }
-        ic: { type: string, nullable: true, description: IČO }
+        ic: { type: string, nullable: true, description: IČO (8 číslic) }
         dic: { type: string, nullable: true, description: DIČ }
         street: { type: string }
         city: { type: string }
         zip: { type: string }
         country_id: { type: integer }
-        email: { type: string, format: email, nullable: true }
+        main_email: { type: string, format: email, description: "Hlavní email klienta — povinný, na něj chodí faktury." }
         phone: { type: string, nullable: true }
+        language: { type: string, enum: [cs, en], description: "Jazyk faktur a emailů. Default cs." }
+        currency_default_id: { type: integer, nullable: true, description: "Výchozí měna pro faktury klienta. Default = supplier.default_currency_id." }
+        hourly_rate: { type: number, format: float, nullable: true, description: "Default hodinová sazba (CZK / hod) pro projekty klienta" }
+        reverse_charge: { type: boolean, description: "Přenesená daňová povinnost — propisuje se do nových faktur." }
+        payment_due_default: { type: integer, description: "Default splatnost (dny) pro nové faktury klienta" }
         is_archived: { type: boolean }
         created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     ClientInput:
       type: object
-      required: [company_name, street, city, zip, country_id]
+      required: [company_name, street, city, zip, country_id, main_email]
       properties:
         company_name: { type: string }
-        display_name: { type: string }
-        ic: { type: string }
-        dic: { type: string }
+        display_name: { type: string, nullable: true }
+        ic: { type: string, nullable: true, description: "IČO — 8 číslic" }
+        dic: { type: string, nullable: true }
         street: { type: string }
         city: { type: string }
         zip: { type: string }
         country_id: { type: integer }
-        email: { type: string, format: email }
-        phone: { type: string }
+        main_email: { type: string, format: email, description: "Hlavní email — povinný (POZOR: backend pole se jmenuje `main_email`, ne `email`)" }
+        phone: { type: string, nullable: true, maxLength: 40 }
+        language: { type: string, enum: [cs, en], default: cs }
+        currency_default_id: { type: integer, nullable: true, description: "Výchozí měna klienta. Pokud chybí, použije se výchozí měna supplier-a." }
+        hourly_rate: { type: number, format: float, nullable: true, description: "Default hodinová sazba pro nové projekty (≥ 0)" }
+        reverse_charge: { type: boolean, default: false }
+        payment_due_default: { type: integer, minimum: 1, maximum: 365, description: "Default splatnost (dny)" }
 
     Invoice:
       type: object
@@ -1812,44 +1913,123 @@ components:
         id: { type: integer }
         supplier_id: { type: integer }
         client_id: { type: integer }
+        client_company_name: { type: string, description: "Denormalizováno z klienta pro pohodlí výpisů" }
+        client_main_email: { type: string, format: email, nullable: true }
         project_id: { type: integer, nullable: true }
-        number: { type: string, nullable: true, description: "Přidělené číslo (po vystavení)" }
-        type:
+        project_name: { type: string, nullable: true }
+        parent_invoice_id: { type: integer, nullable: true, description: "Pro credit_note / cancellation / final-z-proformy odkaz na původní fakturu" }
+        varsymbol: { type: string, nullable: true, description: "Variabilní symbol = číslo faktury. Přiděluje se při issue (u draft je null nebo manuální override)." }
+        invoice_type:
           type: string
-          enum: [normal, proforma, credit_note]
+          enum: [invoice, proforma, credit_note, cancellation]
         status:
           type: string
           enum: [draft, issued, paid, cancelled]
+        language: { type: string, enum: [cs, en], description: "Jazyk PDF/emailů" }
+        reverse_charge: { type: boolean }
         issue_date: { type: string, format: date }
         due_date: { type: string, format: date }
-        taxable_date: { type: string, format: date, nullable: true }
-        currency: { type: string, example: CZK }
-        total: { type: number, format: float }
+        tax_date: { type: string, format: date, nullable: true, description: "DUZP — null u proforem" }
+        currency_id: { type: integer, description: "FK do /settings/currencies (per-supplier)" }
+        currency: { type: string, example: CZK, description: "Denormalizovaný kód měny (= currencies.code)" }
+        currency_symbol: { type: string, example: "Kč" }
+        exchange_rate: { type: number, format: float, nullable: true, description: "CZK / 1 jednotka cizí měny (ČNB). NULL = neaplikováno (např. faktura v CZK)" }
+        exchange_rate_date: { type: string, format: date, nullable: true }
+        total_without_vat: { type: number, format: float }
         total_vat: { type: number, format: float }
-        variable_symbol: { type: string }
+        total_with_vat: { type: number, format: float }
+        rounding: { type: number, format: float, description: "Zaokrouhlení (CZK)" }
+        advance_paid_amount: { type: number, format: float, description: "Záloha k odečtení (u faktury vystavované po proforme)" }
+        amount_to_pay: { type: number, format: float, description: "total_with_vat + rounding − advance_paid_amount" }
+        totals:
+          type: object
+          description: "Agregát pro renderování — duplikuje stejné hodnoty co výše"
+          properties:
+            without_vat: { type: number, format: float }
+            vat: { type: number, format: float }
+            with_vat: { type: number, format: float }
+            rounding: { type: number, format: float }
+            advance_paid_amount: { type: number, format: float }
+            amount_to_pay: { type: number, format: float }
+        vat_breakdown:
+          type: array
+          description: "Per-sazba rozpad DPH (vstup pro QR + PDF)"
+          items:
+            type: object
+            properties:
+              vat_rate_id: { type: integer }
+              rate: { type: number, format: float, example: 21 }
+              base: { type: number, format: float }
+              vat:  { type: number, format: float }
+              total: { type: number, format: float }
+        czk_recap:
+          nullable: true
+          description: "CZK rekapitulace u cizoměnových faktur (null pokud měna == CZK nebo není zafixován kurz)"
+          type: object
+        note: { type: string, nullable: true, description: "Generická poznámka. Pro výstup viz note_above_items / note_below_items." }
+        note_above_items: { type: string, nullable: true }
+        note_below_items: { type: string, nullable: true }
+        bank_account_number: { type: string, nullable: true, description: "Z currencies (per-měna bank účet supplier-a)" }
+        bank_code: { type: string, nullable: true }
+        bank_iban: { type: string, nullable: true }
+        bank_bic: { type: string, nullable: true }
+        approval_status:
+          type: string
+          nullable: true
+          enum: [none, requested, approved, rejected]
         items:
           type: array
           items: { $ref: '#/components/schemas/InvoiceItem' }
+        project_billing_emails:
+          type: array
+          items:
+            type: object
+            properties:
+              email: { type: string, format: email }
+              label: { type: string, nullable: true }
+        issued_at: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     InvoiceInput:
       type: object
       required: [client_id, items]
+      description: |
+        Vstup pro POST /invoices (vytvoří draft) i PUT /invoices/{id} (úprava draftu).
+        Vystavená/zaplacená/storno faktura nelze upravovat — vrátí 409.
       properties:
-        client_id: { type: integer }
-        project_id: { type: integer }
-        type:
+        client_id: { type: integer, description: "Musí patřit aktuálnímu supplier-ovi" }
+        project_id: { type: integer, nullable: true, description: "Pokud uvedeno, musí patřit `client_id`" }
+        invoice_type:
           type: string
-          enum: [normal, proforma, credit_note]
-          default: normal
-        issue_date: { type: string, format: date }
-        due_date: { type: string, format: date }
-        taxable_date: { type: string, format: date }
-        currency: { type: string, example: CZK }
+          enum: [invoice, proforma, credit_note, cancellation]
+          default: invoice
+        issue_date: { type: string, format: date, description: "Default = dnes" }
+        due_date: { type: string, format: date, description: "Default = issue_date + payment_due_days (z projektu/klienta/supplier)" }
+        tax_date: { type: string, format: date, nullable: true, description: "DUZP. U proform se ignoruje (uloží se null)." }
+        currency_id: { type: integer, description: "FK do /settings/currencies (per-supplier). Default = výchozí měna projektu/klienta/supplier." }
+        currency:
+          type: string
+          example: CZK
+          deprecated: true
+          description: "Legacy — kód měny (CZK, EUR, …) resolvuje se na `currency_id` v rámci supplier-a. Preferuj `currency_id`."
+        language: { type: string, enum: [cs, en], description: "Default = language klienta (cs)" }
+        reverse_charge: { type: boolean, description: "Přenesená daňová povinnost. Default = z klienta." }
+        varsymbol:
+          type: string
+          maxLength: 20
+          nullable: true
+          description: "Volitelný manuální override automatického číslování. U draftu lze ponechat null — číslo se přidělí při /issue."
+        advance_paid_amount: { type: number, format: float, default: 0, description: "Záloha k odečtení od total_with_vat" }
+        exchange_rate: { type: number, format: float, nullable: true, description: "Volitelný manuální override ČNB kurzu (CZK / 1 jednotka cizí měny)" }
+        note: { type: string, nullable: true, description: "Generická poznámka (mapuje se na note_below_items pokud není uvedeno jinak)" }
+        note_above_items: { type: string, nullable: true }
+        note_below_items: { type: string, nullable: true }
         items:
           type: array
           items: { $ref: '#/components/schemas/InvoiceItemInput' }
-        note: { type: string }
 
     ProjectBilingEmail:
       type: object
@@ -1956,7 +2136,7 @@ components:
           example: 1500.00
         payment_due_days:
           type: integer
-          minimum: 0
+          minimum: 1
           maximum: 365
           example: 14
         project_number:
@@ -2307,20 +2487,31 @@ components:
       type: object
       properties:
         id: { type: integer }
+        invoice_id: { type: integer }
         description: { type: string }
-        quantity: { type: number }
+        quantity: { type: number, format: float }
         unit: { type: string, example: ks }
-        unit_price: { type: number }
-        vat_rate: { type: number, example: 21 }
-        total_excl_vat: { type: number }
-        total_incl_vat: { type: number }
+        unit_price_without_vat: { type: number, format: float, description: "Jednotková cena bez DPH" }
+        vat_rate_id: { type: integer, description: "FK do /codebooks/vat-rates (kontextově k supplierovi)" }
+        vat_rate_snapshot:
+          type: number
+          format: float
+          example: 21
+          description: "Snapshot procentní hodnoty DPH v okamžiku přidání položky (drží se i po případné změně sazby v číselníku)"
+        vat_code: { type: string, nullable: true, example: "STD", description: "Kód sazby ze snapshot-u (STD / RED1 / RED2 / ZERO / FREE)" }
+        total_without_vat: { type: number, format: float }
+        total_vat: { type: number, format: float }
+        total_with_vat: { type: number, format: float }
+        order_index: { type: integer }
+        linked_work_report_id: { type: integer, nullable: true }
 
     InvoiceItemInput:
       type: object
-      required: [description, quantity, unit_price]
+      required: [description, quantity, unit_price_without_vat, vat_rate_id]
       properties:
         description: { type: string }
-        quantity: { type: number }
-        unit: { type: string }
-        unit_price: { type: number }
-        vat_rate: { type: number, example: 21 }
+        quantity: { type: number, format: float, description: "Musí být kladné" }
+        unit: { type: string, default: "ks" }
+        unit_price_without_vat: { type: number, format: float, description: "Jednotková cena BEZ DPH" }
+        vat_rate_id: { type: integer, description: "FK do /codebooks/vat-rates (kontextově k supplierovi)" }
+        order_index: { type: integer, description: "Pořadí v rámci faktury. Default = pozice v poli." }
