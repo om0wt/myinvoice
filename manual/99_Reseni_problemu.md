@@ -21,6 +21,11 @@ CSRF check selhal. Příčiny:
   `http://localhost:8080`, ale v cfg je `https://dev.example.com`. Oprav v cfg.
 - Reverse proxy / IIS bez správně nastaveného Host headeru. Zkontroluj,
   že server vidí původní hostname.
+- **Docker setup z jiného hostu než `localhost`** (např. LAN IP serveru
+  `http://10.0.0.8:8080`). First-run setup je z libovolného hostu povolen
+  a `app.url` se uloží automaticky podle URL, kterou v setup wizardu použiješ.
+  Alternativa: spusť kontejner s `-e MYINVOICE_APP_URL=http://10.0.0.8:8080`,
+  nebo si po `docker run` uprav `cfg.php` přímo v kontejneru.
 
 ### „Aplikace ještě není inicializována" (HTTP 423)
 

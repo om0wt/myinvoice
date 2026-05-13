@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Setup wizard z LAN IP / non-localhost hostu vracel 403 `origin_mismatch`**
+  (issue #22). `cfg.docker.php` má napevno `app.url = http://localhost:8080`,
+  takže přístup z `http://10.0.0.8:8080/setup` (typicky Docker na headless
+  serveru, browser z workstationu) selhal v `CsrfMiddleware` ještě než se
+  dostal k setup endpointu — uživatel nemohl dokončit první spuštění.
+- `CsrfMiddleware` nyní přeskakuje Origin/Referer check pro `/api/auth/setup*`
+  endpointy, pokud aplikace ještě nemá admin účet (first-run state z
+  `FirstRunLockMiddleware::needsSetup()`). Po vytvoření admina se ochrana
+  okamžitě zapne — setup endpointy mají vlastní first-run guard, který po
+  setupu vrací `setup_done`/`setup_already_done`, takže není defense-in-depth riziko.
+
+### Added
+
+- **Auto-detect `app.url` při first-run setupu.** `SetupAction` přečte
+  `scheme://host[:port]` z hostiteleho requestu (s X-Forwarded-Proto fallbackem)
+  a zapíše do `cfg.local.php`, pokud je v configu prázdná hodnota nebo některý
+  ze známých placeholderů (`http://localhost:8080`, `https://dev.example.com`,
+  `https://example.com`). Pokud uživatel app.url explicitně nastavil přes
+  `MYINVOICE_APP_URL` env nebo `cfg.php`, není přepsán. Důsledek: reset hesla
+  a schvalovací odkazy v emailech budou mít rovnou správnou URL, bez nutnosti
+  ručního zásahu po setupu.
+
+### Docs
+
+- Manuál §2.1.4 a §99.1: dokumentuje přístup z LAN IP, env var
+  `MYINVOICE_APP_URL` pro pokročilé scénáře (reverzní proxy, custom doména).
+
+---
+
 ## [3.4.1] — 2026-05-12
 
 ### Fixed

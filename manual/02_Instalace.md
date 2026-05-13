@@ -177,6 +177,12 @@ V prohlížeči naskočí setup wizard — viz [3. První spuštění](03_Setup_
 > stack běží na plain HTTP — pokud zadáš `https://...` nebo defaultní port,
 > dostaneš `SSL_ERROR_RX_RECORD_TOO_LONG` / `ERR_SSL_PROTOCOL_ERROR`. Pro
 > HTTPS na LAN/produkčním serveru viz [2.1.8 HTTPS / TLS terminace](#218-https--tls-terminace).
+
+> 🌐 **Přístup z jiného stroje (LAN IP, hostname)?** Setup wizard funguje
+> z libovolného hostu (např. `http://10.0.0.8:8080`) a `app.url` se automaticky
+> uloží podle URL, kterou v wizardu použiješ. Pokud potřebuješ URL znát už
+> před setupem (např. produkční doména + reverzní proxy), spusť kontejner
+> s `-e MYINVOICE_APP_URL=https://invoice.example.com`.
 >
 > 🛈 **Přístup z LAN přes IP** (např. `http://192.168.1.50:8080`) — od v2.1.1
 > automaticky funguje. RFC1918 privátní IP (`10.*`, `172.16-31.*`, `192.168.*`),

@@ -36,6 +36,7 @@ final class CsrfMiddleware implements MiddlewareInterface
     public function __construct(
         private readonly Config $config,
         private readonly ResponseFactory $responseFactory,
+        private readonly FirstRunLockMiddleware $firstRunLock,
     ) {}
 
     public function process(Request $request, Handler $handler): Response
@@ -55,6 +56,15 @@ final class CsrfMiddleware implements MiddlewareInterface
         // Public schvalovací endpointy — bez Origin/CSRF (klient přijde z emailu, Origin
         // bude jiný nebo prázdný). Anti-bot ochrana = token v URL + CAPTCHA.
         if (str_starts_with($path, '/api/public/')) {
+            return $handler->handle($request);
+        }
+
+        // First-run setup: během prvotního setupu (žádný admin) povolíme setup endpointům
+        // přijít z libovolného hostu — uživatel ještě nemá šanci nastavit app.url a Docker
+        // default `http://localhost:8080` zablokuje přístup z LAN IP. Po vytvoření admina
+        // se Origin check znovu zapne. Setup endpointy mají vlastní first-run guard
+        // (vrací setup_done/setup_already_done), takže není defense-in-depth riziko.
+        if ($this->firstRunLock->needsSetup() && str_starts_with($path, '/api/auth/setup')) {
             return $handler->handle($request);
         }
 

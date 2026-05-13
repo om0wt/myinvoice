@@ -89,12 +89,21 @@ final class SetupAction
             return Json::error($response, 'setup_failed', $e->getMessage(), 500);
         }
 
-        // Zapiš auth.require_totp do cfg.local.php (Config::load merguje cfg.local.php přes cfg.php).
-        // Píšeme VŽDY (i false), aby stará hodnota z předchozího setupu/resetu nepřevažovala.
-        // Selhání zápisu setup nezruší — vrátíme jen flag a uživatele instruujeme manuálně.
+        // Zapiš auth.require_totp + (volitelně) detekované app.url do cfg.local.php.
+        // Píšeme `auth.require_totp` VŽDY (i false), aby stará hodnota z předchozího setupu nepřevažovala.
+        // `app.url` přepisujeme JEN pokud je v configu prázdné nebo některý ze známých
+        // placeholderů (Docker `http://localhost:8080`, sample `https://dev.example.com`, `https://example.com`).
+        // To umožní dokončit Docker setup z LAN IP a zároveň ušetří uživateli krok ruční konfigurace
+        // (důležité pro reset hesla / schvalovací odkazy v emailech).
+        // Pokud uživatel app.url už nastavil přes MYINVOICE_APP_URL env nebo cfg.php, neperepíšeme.
+        $keysToWrite = ['auth.require_totp' => $requireTotp];
+        $detectedUrl = $this->detectAppUrl($request);
+        if ($detectedUrl !== null && $this->shouldOverwriteAppUrl()) {
+            $keysToWrite['app.url'] = $detectedUrl;
+        }
         $cfgLocalWritten = false;
         try {
-            CfgLocalWriter::setKeys(Bootstrap::rootDir(), ['auth.require_totp' => $requireTotp]);
+            CfgLocalWriter::setKeys(Bootstrap::rootDir(), $keysToWrite);
             $cfgLocalWritten = true;
         } catch (\Throwable $e) {
             $this->logger->log('setup.cfg_local_write_failed', $userId, 'user', $userId, [
@@ -222,6 +231,48 @@ final class SetupAction
         $pdo->prepare('UPDATE supplier SET default_currency_id = ? WHERE id = ?')
             ->execute([$defaultCurrencyId, $supplierId]);
         $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+    }
+
+    /**
+     * Detekuje veřejnou URL aplikace z hostiteleho requestu. Respektuje X-Forwarded-Proto/Host
+     * (PSR-7 Uri už typicky tyto headery zohledňuje, ale Slim default ne — proto manual fallback).
+     * Vrací null pokud Host header chybí (degeneruje na nedělání nic).
+     */
+    private function detectAppUrl(Request $request): ?string
+    {
+        $uri = $request->getUri();
+        $host = $uri->getHost();
+        if ($host === '') {
+            return null;
+        }
+
+        $fwdProto = trim(strtolower($request->getHeaderLine('X-Forwarded-Proto')));
+        $scheme = $fwdProto !== '' ? $fwdProto : $uri->getScheme();
+        if ($scheme !== 'http' && $scheme !== 'https') {
+            $scheme = 'http';
+        }
+
+        $port = $uri->getPort();
+        $isStandard = ($scheme === 'http' && $port === 80) || ($scheme === 'https' && $port === 443);
+
+        return $scheme . '://' . $host . ($port !== null && !$isStandard ? ':' . $port : '');
+    }
+
+    /**
+     * True pokud aktuální app.url je prázdná nebo známý placeholder z vzorových configů.
+     */
+    private function shouldOverwriteAppUrl(): bool
+    {
+        $current = rtrim((string) $this->config->get('app.url', ''), '/');
+        if ($current === '') {
+            return true;
+        }
+        $placeholders = [
+            'http://localhost:8080',  // cfg.docker.php default
+            'https://dev.example.com',// cfg.sample.php default
+            'https://example.com',    // generic sample
+        ];
+        return in_array($current, $placeholders, true);
     }
 
     private function validate(array $admin, ?array $supplier): array
