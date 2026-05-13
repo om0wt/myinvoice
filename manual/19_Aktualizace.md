@@ -168,10 +168,16 @@ Většina Docker uživatelů migraci nepotřebuje — `docker compose pull && up
 na 3.2.1+ funguje beze změny, default chování je 3-volume layout (kompatibilní
 s 3.1.x).
 
-Single-volume layout zjednodušuje stack na PaaS (Railway, Heroku, Fly.io) a
-umožňuje strict read-only kontejner mimo `/data`. Sjednotí všechny stateful
-adresáře (log, storage, private, volitelně `cfg.local.php`) pod jediný volume
-`app-data:/data`.
+> 📖 Popis layoutu, tabulku rozdílů a postup pro **novou instalaci rovnou na
+> single-volume** najdeš v [§ 2.1.5.3 Single-volume úložiště](02_Instalace.md#2153-single-volume-úložiště-volitelně).
+> Tato sekce řeší jen migraci dat z existujícího 3-volume layoutu.
+
+**Proč na single-volume přejít:** jeden persistent volume = jeden `tar` při
+záloze, jednodušší životní cyklus na PaaS (Railway, Heroku, Fly.io), strict
+read-only root filesystem (kontejner nemá zapisovatelnou cestu mimo `/data`),
+přehlednější `docker volume ls`. **Proč nepřejít:** funkčně to nic nepřináší;
+3-volume default funguje dál bez výhrad a migrace má malé riziko (viz
+*Idempotence + recovery* na konci sekce).
 
 ### Postup opt-in migrace
 

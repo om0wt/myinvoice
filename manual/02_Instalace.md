@@ -243,26 +243,10 @@ MYINVOICE_AUTH_REQUIRE_TOTP=true # od v3.3.0 — vynutit 2FA pro všechny uživa
 Default je `20` pokusů s pauzou `3` sekundy. Pokud proměnné nenastavíš, použije
 se výchozí chování.
 
-**`MYINVOICE_DATA_DIR`** je od v3.2.1 čistě **opt-in**. Existují dva režimy:
-
-- **Default — 3-volume layout** (kompatibilní s 3.1.x). `MYINVOICE_DATA_DIR` je
-  unset, compose mountuje tři named volumes — `app-log:/var/www/html/log`,
-  `app-storage:/var/www/html/storage`, `app-private:/var/www/html/private`.
-  Pro většinu Docker uživatelů žádná změna oproti 3.1.x. `docker compose pull && up -d`
-  na 3.2.1 funguje bez jakékoli migrace.
-- **Opt-in — single-volume / DATA_DIR layout** (PaaS, Railway, Heroku, Fly.io).
-  Nastav `MYINVOICE_DATA_DIR=/data` (přes env nebo override compose) a všechny
-  stateful adresáře (`log/`, `storage/{invoices,uploads,backup,sessions,cache}`,
-  `private/dkim/`) se sjednotí pod `/data`. V repu je k tomu připravený
-  `docker-compose.single-volume.yml` override:
-
-  ```bash
-  docker compose -f docker-compose.yml -f docker-compose.single-volume.yml up -d
-  ```
-
-  Pokud přecházíš z existujícího 3-volume layoutu na single-volume, spusť napřed
-  `cmd/docker-migrate-volumes.{sh,ps1}` (zkopíruje data ze starých volumes
-  do `app-data`). Detaily viz § 19.5.
+**`MYINVOICE_DATA_DIR`** je od v3.2.1 čistě **opt-in**. Default je 3-volume
+layout (`app-log`, `app-storage`, `app-private`) kompatibilní s 3.1.x; pro
+sjednocení všech stateful adresářů pod jediný persistent volume `app-data:/data`
+viz dedikovanou sekci **[2.1.5.3 Single-volume úložiště](#2153-single-volume-úložiště-volitelně)** níže.
 
 **`cfg.docker.php` mount je nově volitelný** — image obsahuje stub `cfg.php`
 (`<?php return [];`) a vše lze předat přes ENV (12-factor). Pro full-ENV deploy
@@ -275,6 +259,91 @@ Některé PaaS (typicky Railway) injectují nevyřešené placeholdery jako
 `${VAR}`, pokud proměnná není definovaná. Od v3.1.0 je MyInvoice v env
 overridech ignoruje, takže nepřepíší validní hodnoty z `cfg.php`/`cfg.docker.php`.
 Pokud chybí `secret_encryption_key`, aplikace fallbackuje na HKDF z `app.pepper`.
+
+### 2.1.5.3 Single-volume úložiště (volitelně)
+
+> 🛈 **TL;DR:** chceš zálohovat všechna data MyInvoice jedním `tar`em a držet
+> jen jeden persistent volume místo tří? Použij single-volume mód.
+
+**Default vs. single-volume.** Docker stack umí dva ekvivalentní layouty:
+
+| Vlastnost            | Default (3-volume)                                        | Single-volume                              |
+|----------------------|-----------------------------------------------------------|--------------------------------------------|
+| Volumes              | `app-log` + `app-storage` + `app-private`                 | `app-data` (jediný)                        |
+| Mount points         | `/var/www/html/{log,storage,private}`                     | `/data`                                    |
+| Env                  | `MYINVOICE_DATA_DIR` unset                                | `MYINVOICE_DATA_DIR=/data`                 |
+| Compose             | `docker compose up -d`                                    | `… -f docker-compose.single-volume.yml …`  |
+| Kompatibilita        | 3.1.x → 3.x bez migrace                                   | od 3.2.0; vyžaduje opt-in migraci          |
+| Backup                | `docker run --rm -v ... tar czf` × 3                      | jeden tar nad `app-data`                   |
+| Vhodné pro            | self-hosted VPS, NAS, vlastní hardware                    | PaaS (Railway, Heroku, Fly.io), read-only FS, jednoduché zálohování |
+
+Obě varianty jsou trvale podporované — *single-volume není „lepší"*, je to alternativní layout pro specifické deploy scénáře.
+
+**Co se pod `/data` přesune.** Pokud nastavíš `MYINVOICE_DATA_DIR=/data`, aplikace přepíše (přes `Config::applyDataDirOverrides()`):
+
+- `log/` → `/data/log`
+- `storage/invoices/`, `storage/uploads/`, `storage/backup/`, `storage/sessions/`, `storage/cache/` → `/data/storage/…`
+- `private/dkim/` → `/data/private/dkim`
+
+Žádné jiné cesty se nemění (kód, vendor, web/dist zůstávají uvnitř `/var/www/html`, čistě read-only).
+
+#### Pro novou instalaci (od nuly)
+
+Nejjednodušší cesta — přejmenuj override na `docker-compose.override.yml`, compose ho pak natáhne automaticky:
+
+```bash
+# Linux / macOS
+git clone https://github.com/radekhulan/myinvoice.git && cd myinvoice
+cp docker-compose.single-volume.yml docker-compose.override.yml
+bash cmd/docker-install.sh
+```
+
+```powershell
+# Windows
+git clone https://github.com/radekhulan/myinvoice.git
+cd myinvoice
+Copy-Item docker-compose.single-volume.yml docker-compose.override.yml
+.\cmd\docker-install.ps1
+```
+
+Pro GHCR install (Varianta C bez klonování repa) si stáhni oba compose
+soubory a override přejmenuj stejně:
+
+```bash
+mkdir myinvoice && cd myinvoice
+curl -O https://raw.githubusercontent.com/radekhulan/myinvoice/master/docker-compose.production.yml
+curl -O https://raw.githubusercontent.com/radekhulan/myinvoice/master/docker-compose.single-volume.yml
+curl -O https://raw.githubusercontent.com/radekhulan/myinvoice/master/cfg.sample.php
+mv docker-compose.production.yml docker-compose.yml
+mv docker-compose.single-volume.yml docker-compose.override.yml
+cp cfg.sample.php cfg.docker.php  # edituj — secrets viz Varianta C2
+docker compose up -d
+```
+
+Ověření, že běží single-volume layout:
+
+```bash
+docker compose exec app sh -c 'echo $MYINVOICE_DATA_DIR'   # → /data
+docker compose exec app ls /data                            # → log  storage  private
+docker volume ls | grep myinvoice                           # vidíš pouze app-data + db-data
+```
+
+#### Pro existující 3-volume instalaci (migrace)
+
+**Nikdy nepřepínej layout bez migrace — aplikace by nahlížela do prázdného `/data` a tvářila se, že data zmizela.** Postup je popsaný v § [19.5 Upgrade na 3.2.x — volitelná migrace na single-volume layout](19_Aktualizace.md#195-upgrade-na-32x--voliteln%C3%A1-migrace-na-single-volume-layout).
+
+Shrnutí: `cmd/docker-migrate-volumes.{sh,ps1}` zkopíruje data ze starých volumes do nového `app-data` přes dočasný `alpine` sidecar, staré volumes nesmaže (musíš ručně po ověření, že vše funguje), je idempotentní.
+
+#### Backup single-volume layoutu
+
+```bash
+docker run --rm \
+  -v myinvoice_app-data:/data:ro \
+  -v "$PWD":/backup \
+  alpine tar czf /backup/myinvoice-data-$(date +%F).tar.gz -C /data .
+```
+
+Plus dump MariaDB (viz § [19.7 Záloha a obnova](19_Aktualizace.md)) — to jsou dohromady **dvě entity** k zálohování (db + app-data) místo čtyř.
 
 ### 2.1.6 Daily ops
 
