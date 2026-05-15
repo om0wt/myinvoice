@@ -880,7 +880,7 @@
     "due_this_week": "Due this week",
     "due_this_month": "Due this month",
     "cashflow_forecast": "Cash-flow forecast — incoming",
-    "cashflow_forecast_hint": "From unpaid invoices with due_date in the window.",
+    "cashflow_forecast_hint": "From unpaid invoices with due date in the window.",
     "cashflow_in_days": "Within {n} days",
     "overdue_table": "Overdue",
     "overdue_none": "✓ No overdue invoices",

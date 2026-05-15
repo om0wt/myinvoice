@@ -880,7 +880,7 @@
     "due_this_week": "Splatné tento týden",
     "due_this_month": "Splatné tento měsíc",
     "cashflow_forecast": "Cash-flow forecast — co přiteče",
-    "cashflow_forecast_hint": "Z neuhrazených faktur s due_date v daném okně.",
+    "cashflow_forecast_hint": "Z neuhrazených faktur se splatností v daném okně.",
     "cashflow_in_days": "Do {n} dní",
     "overdue_table": "Po splatnosti",
     "overdue_none": "✓ Žádné faktury po splatnosti",
